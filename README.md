@@ -1,8 +1,8 @@
 # Bus Feed
 
-<img width="3462" height="2598" alt="BusFeed_Main" src="https://github.com/user-attachments/assets/c1819866-6247-47f0-b5aa-5ec5bf9ea194" />
-
 An ESP32-based e-paper display that shows the next bus departures at my stop in real time, so I know at a glance on my way out the door whether I need to rush or still have time.
+
+<img width="3462" height="2598" alt="BusFeed_Main" src="https://github.com/user-attachments/assets/c1819866-6247-47f0-b5aa-5ec5bf9ea194" />
 
 ## Motivation
 
