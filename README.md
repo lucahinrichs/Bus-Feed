@@ -40,3 +40,23 @@ This project had two goals. First, I wanted to understand how to call external R
 - TLS certificate validation is intentionally disabled (`setInsecure()`). Acceptable for private use on a home network, but not a production-grade approach
 - During a longer API outage, the display currently only shows a status message instead of the last known departures
 - No watchdog timer: if WiFi or HTTP hangs, a manual reset is currently the only fix
+
+## Roadmap
+
+### Done
+
+- [x] **Live departures via REST API** with automatic fallback to the VBB mirror
+- [x] **Two direction groups at once**, including delay indicators
+- [x] **Framed clock** between the two sections, synced via NTP with automatic Berlin time zone and daylight saving handling
+- [x] **Ghosting-aware refresh:** partial refreshes, full refresh every 10th cycle
+- [x] **Dark mode and manual refresh** via the two buttons
+- [x] **Status messages** for WiFi, JSON, and API errors
+
+### Planned
+
+- [ ] **Web interface for configuration:** the ESP32 hosts a small web page (reachable on the local network) where the departure stop can be chosen, instead of changing the hardcoded stop ID in the code
+- [ ] **Vehicle type filter:** choose which modes of transport are shown (subway, suburban train, bus, tram) via checkboxes in the web interface
+- [ ] **Persistent settings:** store the chosen configuration on the device so it survives a reboot
+- [ ] **Configurable direction groups:** replace the hardcoded direction matching (e.g. "Jungfernheide"/"Saatwinkler") so the two display sections work for any stop
+- [ ] **Show last known departures during an API outage** instead of only a status message
+- [ ] **Watchdog timer:** recover automatically if WiFi or HTTP hangs
