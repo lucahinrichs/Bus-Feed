@@ -45,11 +45,11 @@ struct Departure {
     bool hasDelay;
 };
 
-Departure topDeps[2];
-int topCount = 0;
+Departure dirADeps[2];
+int dirACount = 0;
 
-Departure bottomDeps[2];
-int bottomCount = 0;
+Departure dirBDeps[2];
+int dirBCount = 0;
 
 char statusMsg[32] = "";
 
@@ -150,7 +150,7 @@ void drawItem(int x, int y, const Departure& dep, uint16_t inkColor) {
     display.print(dir);
 }
 
-// Renders the full screen: two departure blocks (top/bottom) separated by a
+// Renders the full screen: two departure blocks (A/B) separated by a
 // framed clock and a dashed divider line. isPartial controls whether GxEPD2
 // does a fast partial refresh (less flicker, can leave faint ghosting over
 // many cycles) or a full refresh (slower, clears ghosting).
@@ -178,18 +178,18 @@ void drawUI(bool isPartial) {
         display.setTextColor(inkColor);
 
         // --- TOP HALF ---
-        if (topCount == 0) {
+        if (dirACount == 0) {
             display.setTextSize(1);
             display.setCursor(4, 15);
             if (strlen(statusMsg) > 0) {
                 display.print(statusMsg);
             } else {
-                display.print("Keine Abfahrten (JH / Saatw.)");
+                display.print("Keine Abfahrten (Pankow / HBF)");
             }
         } else {
             int yPositionsTop[2] = {1, 28};
-            for (int i = 0; i < topCount; i++) {
-                drawItem(4, yPositionsTop[i], topDeps[i], inkColor);
+            for (int i = 0; i < dirACount; i++) {
+                drawItem(4, yPositionsTop[i], dirADeps[i], inkColor);
             }
         }
 
@@ -208,18 +208,18 @@ void drawUI(bool isPartial) {
         }
 
         // --- BOTTOM HALF ---
-        if (bottomCount == 0) {
+        if (dirBCount == 0) {
             display.setTextSize(1);
             display.setCursor(4, 89);
             if (strlen(statusMsg) > 0) {
                 display.print(statusMsg);
             } else {
-                display.print("Keine Abfahrten (M27 / 123)");
+                display.print("Keine Abfahrten (JH / Saatw.)");
             }
         } else {
             int yPositionsBottom[2] = {78, 105};
-            for (int i = 0; i < bottomCount; i++) {
-                drawItem(4, yPositionsBottom[i], bottomDeps[i], inkColor);
+            for (int i = 0; i < dirBCount; i++) {
+                drawItem(4, yPositionsBottom[i], dirBDeps[i], inkColor);
             }
         }
 
@@ -227,12 +227,12 @@ void drawUI(bool isPartial) {
 }
 
 // Fetches departures from the API (with fallback), parses them into
-// topDeps/bottomDeps, and triggers a redraw. Also handles WiFi/HTTP/JSON
+// dirADeps/dirBDeps, and triggers a redraw. Also handles WiFi/HTTP/JSON
 // error states by falling back to a status message instead of a blank screen.
 void fetchAndDraw(bool isPartial) {
     if (wifiMulti.run() != WL_CONNECTED) {
         Serial.println("WIFI getrennt, Re-Connect läuft...");
-        if (topCount == 0 && bottomCount == 0) strncpy(statusMsg, "WIFI Re-Connect...", sizeof(statusMsg) - 1);
+        if (dirACount == 0 && dirBCount == 0) strncpy(statusMsg, "WIFI Re-Connect...", sizeof(statusMsg) - 1);
         drawUI(isPartial);
         return;
     }
@@ -277,8 +277,8 @@ void fetchAndDraw(bool isPartial) {
 
         if (!error) {
             statusMsg[0] = '\0';
-            topCount = 0;
-            bottomCount = 0;
+            dirACount = 0;
+            dirBCount = 0;
 
             for (JsonObject dep : doc["departures"].as<JsonArray>()) {
                 const char* lineRaw = dep["line"]["name"] | "?";
@@ -331,45 +331,44 @@ void fetchAndDraw(bool isPartial) {
                     }
                 }
 
-                // Sort each departure into the top or bottom block based on
-                // its direction (top = towards Jungfernheide/Saatwinkler).
-                bool isTop = (strstr(dirLower, "jungfernheide") != nullptr || strstr(dirLower, "saatwinkler") != nullptr);
+                // Sort each departure into direction group A or B (A = towards Pankow / HBF, B = towards Jungfernheide / Saatwinkler)
+                bool isDirA = !(strstr(dirLower, "jungfernheide") != nullptr || strstr(dirLower, "saatwinkler") != nullptr);
 
-                if (isTop) {
-                    if (topCount < 2) {
-                        strncpy(topDeps[topCount].line, lineRaw, LINE_LEN - 1);
-                        topDeps[topCount].line[LINE_LEN - 1] = '\0';
-                        strncpy(topDeps[topCount].direction, dirFinal, DIR_LEN - 1);
-                        topDeps[topCount].direction[DIR_LEN - 1] = '\0';
-                        topDeps[topCount].minutes = mins;
-                        topDeps[topCount].delayMin = delayMin;
-                        topDeps[topCount].hasDelay = hasDelay;
-                        topCount++;
+                if (isDirA) {
+                    if (dirACount < 2) {
+                        strncpy(dirADeps[dirACount].line, lineRaw, LINE_LEN - 1);
+                        dirADeps[dirACount].line[LINE_LEN - 1] = '\0';
+                        strncpy(dirADeps[dirACount].direction, dirFinal, DIR_LEN - 1);
+                        dirADeps[dirACount].direction[DIR_LEN - 1] = '\0';
+                        dirADeps[dirACount].minutes = mins;
+                        dirADeps[dirACount].delayMin = delayMin;
+                        dirADeps[dirACount].hasDelay = hasDelay;
+                        dirACount++;
                     }
                 } else {
-                    if (bottomCount < 2) {
-                        strncpy(bottomDeps[bottomCount].line, lineRaw, LINE_LEN - 1);
-                        bottomDeps[bottomCount].line[LINE_LEN - 1] = '\0';
-                        strncpy(bottomDeps[bottomCount].direction, dirFinal, DIR_LEN - 1);
-                        bottomDeps[bottomCount].direction[DIR_LEN - 1] = '\0';
-                        bottomDeps[bottomCount].minutes = mins;
-                        bottomDeps[bottomCount].delayMin = delayMin;
-                        bottomDeps[bottomCount].hasDelay = hasDelay;
-                        bottomCount++;
+                    if (dirBCount < 2) {
+                        strncpy(dirBDeps[dirBCount].line, lineRaw, LINE_LEN - 1);
+                        dirBDeps[dirBCount].line[LINE_LEN - 1] = '\0';
+                        strncpy(dirBDeps[dirBCount].direction, dirFinal, DIR_LEN - 1);
+                        dirBDeps[dirBCount].direction[DIR_LEN - 1] = '\0';
+                        dirBDeps[dirBCount].minutes = mins;
+                        dirBDeps[dirBCount].delayMin = delayMin;
+                        dirBDeps[dirBCount].hasDelay = hasDelay;
+                        dirBCount++;
                     }
                 }
 
                 // Stop early once both blocks are full — no need to keep
                 // scanning the rest of the API response.
-                if (topCount >= 2 && bottomCount >= 2) break;
+                if (dirACount >= 2 && dirBCount >= 2) break;
             }
         } else {
             Serial.printf("JSON Error: %s\n", error.c_str());
-            if (topCount == 0 && bottomCount == 0) strncpy(statusMsg, "JSON Fehler", sizeof(statusMsg) - 1);
+            if (dirACount == 0 && dirBCount == 0) strncpy(statusMsg, "JSON Fehler", sizeof(statusMsg) - 1);
         }
     } else {
         Serial.printf("HTTP Error (beide APIs fehlgeschlagen): %d\n", code);
-        if (topCount == 0 && bottomCount == 0) strncpy(statusMsg, "API Server 503", sizeof(statusMsg) - 1);
+        if (dirACount == 0 && dirBCount == 0) strncpy(statusMsg, "API Server 503", sizeof(statusMsg) - 1);
     }
 
     drawUI(isPartial);
