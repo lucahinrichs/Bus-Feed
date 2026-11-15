@@ -17,6 +17,12 @@ This project had two goals. First, I wanted to understand how to call external R
 
 <img width="3438" height="2579" alt="BusFeed_Hand" src="https://github.com/user-attachments/assets/3855fd0b-c623-4700-98ca-0abc72eaa4c1" />
 
+## Setup
+
+1. Copy `include/secrets.h.example` to `include/secrets.h`
+2. Enter your Wi-Fi credentials in the new file
+3. Build and flash with PlatformIO
+
 ## Features
 
 - Live departures for two stop directions at once (top/bottom sections), including delay indicators
@@ -40,6 +46,7 @@ This project had two goals. First, I wanted to understand how to call external R
 - TLS certificate validation is intentionally disabled (`setInsecure()`). Acceptable for private use on a home network, but not a production-grade approach
 - During a longer API outage, the display currently only shows a status message instead of the last known departures
 - No watchdog timer: if WiFi or HTTP hangs, a manual reset is currently the only fix
+- The configuration web interface does not work in networks with client isolation (e.g. guest Wi-Fi), because the browser cannot reach the ESP32 there
 
 ## Roadmap
 
@@ -55,6 +62,7 @@ This project had two goals. First, I wanted to understand how to call external R
 ### Planned
 
 - [ ] **Web interface for configuration:** the ESP32 hosts a small web page (reachable on the local network) where the departure stop can be chosen, instead of changing the hardcoded stop ID in the code
+- [ ] **Configuration mode** on button press, ends automatically after saving or a timeout
 - [ ] **Vehicle type filter:** choose which modes of transport are shown (subway, suburban train, bus, tram) via checkboxes in the web interface
 - [ ] **Persistent settings:** store the chosen configuration on the device so it survives a reboot
 - [ ] **Configurable direction groups:** replace the hardcoded direction matching (e.g. "Jungfernheide"/"Saatwinkler") so the two display sections work for any stop
