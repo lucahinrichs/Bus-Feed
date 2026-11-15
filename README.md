@@ -12,7 +12,7 @@ This project had two goals. First, I wanted to understand how to call external R
 
 - **Hardware:** ESP32-S3 (Elecrow CrowPanel 2.13" e-paper, SSD1680 driver)
 - **Framework:** Arduino / PlatformIO
-- **Libraries:** GxEPD2 (display driver), ArduinoJson (JSON parsing), WiFiMulti, HTTPClient, WiFiClientSecure
+- **Libraries:** GxEPD2 (display driver), ArduinoJson (JSON parsing), WiFiMulti, HTTPClient, WiFiClientSecure, WebServer, Preferences
 - **Data source:** [v6.bvg.transport.rest](https://v6.bvg.transport.rest) (unofficial, free REST API for real-time BVG/VBB departures), with automatic fallback to the VBB mirror endpoint on outages
 
 <img width="3438" height="2579" alt="BusFeed_Hand" src="https://github.com/user-attachments/assets/3855fd0b-c623-4700-98ca-0abc72eaa4c1" />
@@ -23,6 +23,14 @@ This project had two goals. First, I wanted to understand how to call external R
 2. Enter your Wi-Fi credentials in the new file
 3. Build and flash with PlatformIO
 
+## Configuration
+
+1. Press the middle of the side lever. The display shows an address and the configuration mode starts.
+2. Open the address in a browser on a device in the same network.
+3. Search for a station, choose the vehicle types and save.
+
+The configuration mode ends automatically after a timeout. Settings are stored on the device and survive a reboot.
+
 ## Features
 
 - Live departures for two stop directions at once (top/bottom sections), including delay indicators
@@ -30,6 +38,7 @@ This project had two goals. First, I wanted to understand how to call external R
 - Alternates partial and full display refreshes (a full refresh every 10th cycle) to avoid e-paper ghosting while keeping refresh times low
 - Dark mode toggle via button press (inverts foreground/background colors)
 - Manual instant refresh via a second button, independent of the 60-second cycle
+- Configuration mode on button press with a small web interface (station search, vehicle type toggles), settings stored persistently
 - Status messages for WiFi issues, JSON errors, or API outages instead of a blank or frozen display
 
 ## What I Learned
@@ -39,10 +48,14 @@ This project had two goals. First, I wanted to understand how to call external R
 - Debugged timezone/date parsing (`sscanf`, `struct tm`, `mktime`) to calculate minutes until departure
 - Learned that free, unofficial APIs like this one can have occasional downtime, and why a fallback/status-display strategy matters more than assuming "it'll just work"
 - Iterative layout fine-tuning directly on real hardware (pixel positioning, spacing, small UI details like a frame around the clock)
+- Hosting a small web server on the ESP32, handling form data, and persisting settings in flash with `Preferences`
+- Debugging network problems: a guest Wi-Fi with client isolation made the device unreachable although the code was fine
 
 ## Known Limitations
 
-- Stop ID, lines, and direction matching (e.g. "Jungfernheide"/"Saatwinkler") are currently hardcoded rather than configurable
+- The selected station and vehicle types are saved, but not yet used for the departure requests, so the display still shows the default stop
+- Direction matching (e.g. "Jungfernheide"/"Saatwinkler") is hardcoded, so other stops put all departures into the top section
+- The web page does not yet show the currently saved settings
 - TLS certificate validation is intentionally disabled (`setInsecure()`). Acceptable for private use on a home network, but not a production-grade approach
 - During a longer API outage, the display currently only shows a status message instead of the last known departures
 - No watchdog timer: if WiFi or HTTP hangs, a manual reset is currently the only fix
@@ -56,15 +69,17 @@ This project had two goals. First, I wanted to understand how to call external R
 - [x] **Two direction groups at once**, including delay indicators
 - [x] **Framed clock** between the two sections, synced via NTP with automatic Berlin time zone and daylight saving handling
 - [x] **Ghosting-aware refresh:** partial refreshes, full refresh every 10th cycle
-- [x] **Dark mode and manual refresh** via the two buttons
+- [x] **Dark mode and manual refresh** via the buttons
 - [x] **Status messages** for WiFi, JSON, and API errors
+- [x] **Configuration mode** on button press with automatic timeout
+- [x] **Web interface** with station search and vehicle type toggles
+- [x] **Persistent settings** across reboots
 
 ### Planned
 
-- [ ] **Web interface for configuration:** the ESP32 hosts a small web page (reachable on the local network) where the departure stop can be chosen, instead of changing the hardcoded stop ID in the code
-- [ ] **Configuration mode** on button press, ends automatically after saving or a timeout
-- [ ] **Vehicle type filter:** choose which modes of transport are shown (subway, suburban train, bus, tram) via checkboxes in the web interface
-- [ ] **Persistent settings:** store the chosen configuration on the device so it survives a reboot
-- [ ] **Configurable direction groups:** replace the hardcoded direction matching (e.g. "Jungfernheide"/"Saatwinkler") so the two display sections work for any stop
+- [ ] **Use the saved station and vehicle types** for the departure requests
+- [ ] **Configurable direction groups** so both sections work for any stop
+- [ ] **Show saved settings** on the web page
 - [ ] **Show last known departures during an API outage** instead of only a status message
 - [ ] **Watchdog timer:** recover automatically if WiFi or HTTP hangs
+- [ ] **Scrolling through later departures** with the side lever, showing clock times instead of minutes
