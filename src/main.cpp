@@ -5,6 +5,7 @@
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <WebServer.h>
+#include <Preferences.h>
 #include <ArduinoJson.h>
 #include <ctime>
 #include "secrets.h"
@@ -30,6 +31,7 @@ const char* ntp_server = "pool.ntp.org";
 const char* tz_berlin = "CET-1CEST,M3.5.0,M10.5.0/3";
 WiFiMulti wifiMulti;
 WebServer server(80);   // create server (accessible on port 80)
+Preferences prefs;      // memory object that survives restarts
 
 // --- DARK MODE ---
 // Rather than hardcoding black/white everywhere, drawUI()/drawItem() derive
@@ -63,11 +65,17 @@ const char* API_URLS[2] = {
 };
 
 unsigned long lastUpdate = 0;
-const unsigned long UPDATE_INTERVAL = 60000; // 60 seconds between scheduled refreshes
-constexpr unsigned long CONFIG_TIMEOUT_MS = 60000; // 60 s for testing, rais to 10 minutes later on
+const unsigned long UPDATE_INTERVAL = 60000;     // 60 seconds between scheduled refreshes
+constexpr unsigned long CONFIG_TIMEOUT_MS = 60000;   // 60 s for testing, rais to 10 minutes later on
 int refreshCounter = 0;
 bool configModeActive = false;
 unsigned long configModeStart = 0;
+bool showUBahn = true;
+bool showSBahn = true;
+bool showBus = true;
+bool showTram = true;
+char stopID[16] = "900002200";
+char stopName[48] = "";  // display name, only needed for the web page
 
 // Parses an ISO 8601 timestamp (e.g. "2026-09-27T17:12:00+02:00") and returns
 // the number of minutes from now until that time.
@@ -232,6 +240,28 @@ void drawUI(bool isPartial) {
     } while (display.nextPage());
 }
 
+void drawConfigScreen() {
+    display.setRotation(3);
+    display.setFullWindow();
+    uint16_t inkColor = DARK_MODE ? GxEPD_WHITE : GxEPD_BLACK;
+    uint16_t bgColor   = DARK_MODE ? GxEPD_BLACK : GxEPD_WHITE;
+
+    display.firstPage();
+    do {
+        display.fillScreen(bgColor);
+        display.setTextColor(inkColor);
+        display.setTextSize(1);
+        display.setCursor(4, 10);
+        display.print("Set station: ");
+        display.setCursor(4, 20);
+        display.print("http://");
+        display.print(WiFi.localIP());
+        display.setCursor(4, 30);
+        display.print("(Valid for 1 min)");
+    } while (display.nextPage());
+
+}
+
 // Fetches departures from the API (with fallback), parses them into
 // dirADeps/dirBDeps, and triggers a redraw. Also handles WiFi/HTTP/JSON
 // error states by falling back to a status message instead of a blank screen.
@@ -381,7 +411,111 @@ void fetchAndDraw(bool isPartial) {
 }
 
 void handleRoot() {
-    server.send(200, "text/html", "<h1>Hallo</h1>");
+    server.send(200, "text/html", R"rawliteral(
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bus Feed</title>
+<style>
+    body { font-family: sans-serif; max-width: 500px; margin: 20px auto; padding: 0 16px; }
+    .toggles { display: flex; gap: 16px; flex-wrap: wrap; margin: 16px 0; }
+    label { font-size: 18px; }
+    input[type=submit] { margin-top: 16px; padding: 10px 24px; font-size: 18px; }
+    #search { width: 100%; padding: 10px; font-size: 18px; box-sizing: border-box; }
+    #results { list-style: none; padding: 0; margin: 4px 0; }
+    #results li { padding: 10px; border-bottom: 1px solid #ccc; cursor: pointer; font-size: 18px; }
+</style>
+</head>
+<body>
+<h1>Bus Feed</h1>
+<form method="POST" action="/save">
+    <input type="text" id="search" placeholder="Search station..." autocomplete="off">
+    <ul id="results"></ul>
+    <p>Selected: <b id="selected">none</b></p>
+    <input type="hidden" name="stop" id="stop">
+    <input type="hidden" name="stopname" id="stopname">
+
+    <div class="toggles">
+        <label><input type="checkbox" name="ubahn" checked> U-Bahn</label>
+        <label><input type="checkbox" name="sbahn" checked> S-Bahn</label>
+        <label><input type="checkbox" name="bus" checked> Bus</label>
+        <label><input type="checkbox" name="tram" checked> Tram</label>
+    </div>
+    <input type="submit" value="Save">
+</form>
+
+<script>
+const search = document.getElementById('search');
+const results = document.getElementById('results');
+let timer;
+
+search.addEventListener('input', () => {
+    clearTimeout(timer);
+    const q = search.value.trim();
+    if (q.length < 3) { results.innerHTML = ''; return; }
+    timer = setTimeout(async () => {
+        const url = 'https://v6.bvg.transport.rest/locations?query=' + encodeURIComponent(q)
+                  + '&results=6&addresses=false&poi=false&pretty=false';
+        try {
+            const res = await fetch(url);
+            const items = await res.json();
+            results.innerHTML = '';
+            for (const s of items) {
+                if (s.type !== 'stop') continue;
+                const li = document.createElement('li');
+                li.textContent = s.name;
+                li.onclick = () => {
+                    document.getElementById('stop').value = s.id;
+                    document.getElementById('stopname').value = s.name;
+                    document.getElementById('selected').textContent = s.name;
+                    results.innerHTML = '';
+                    search.value = '';
+                };
+                results.appendChild(li);
+            }
+        } catch (e) {
+            results.textContent = 'Search failed (no internet?)';
+        }
+    }, 300);
+});
+</script>
+</body>
+</html>
+)rawliteral");
+}
+
+// Handles the POST from the config form. The browser only sends checked
+// checkboxes, so hasArg() is true for checked and false for unchecked ones.
+void handleSave() {
+    showUBahn = server.hasArg("ubahn");
+    showSBahn = server.hasArg("sbahn");
+    showBus = server.hasArg("bus");
+    showTram = server.hasArg("tram");
+
+    if (server.arg("stop").length() > 0) {
+        strncpy(stopID, server.arg("stop").c_str(), sizeof(stopID) - 1);
+        stopID[sizeof(stopID) - 1] = '\0';
+    }
+
+    if (server.arg("stopname").length() > 0) {
+        strncpy(stopName, server.arg("stopname").c_str(), sizeof(stopName) - 1);
+        stopName[sizeof(stopName) - 1] = '\0';
+    }
+
+    prefs.begin("busfeed", false);
+    prefs.putBool("ubahn", showUBahn);  // key, value
+    prefs.putBool("sbahn", showSBahn);  
+    prefs.putBool("bus", showBus);  
+    prefs.putBool("tram", showTram);  
+    prefs.putString("stopid", stopID);
+    prefs.putString("stopname", stopName);
+    prefs.end();
+
+    Serial.printf("U:%d S:%d Bus:%d Tram:%d\n", showUBahn, showSBahn, showBus, showTram);
+    Serial.printf("stop: %s (%s)\n", stopID, stopName);
+    server.send(200, "text/html", "<h1>Saved</h1>");
 }
 
 void setup() {
@@ -416,9 +550,28 @@ void setup() {
         delay(200);
     }
 
+    prefs.begin("busfeed", true);       // true => read only
+    showUBahn = prefs.getBool("ubahn", true);
+    showSBahn = prefs.getBool("sbahn", true);
+    showBus = prefs.getBool("bus", true);
+    showTram = prefs.getBool("tram", true);
+
+    String saveId = prefs.getString("stopid", stopID);          // default = current value
+    strncpy(stopID, saveId.c_str(), sizeof(stopID) - 1);
+    stopID[sizeof(stopID) - 1] = '\0';
+
+    String saveName = prefs.getString("stopname", stopName);    // default = current value
+    strncpy(stopName, saveName.c_str(), sizeof(stopName) - 1);
+    stopName[sizeof(stopName) - 1] = '\0';
+    prefs.end();
+
+    Serial.printf("U:%d S:%d Bus:%d Tram:%d\n", showUBahn, showSBahn, showBus, showTram);
+    Serial.printf("stop: %s (%s)\n", stopID, stopName);
+
     fetchAndDraw(false);
     lastUpdate = millis();
-    server.on("/", handleRoot);     // register route once, server.begin() happens on button press
+    server.on("/", handleRoot);         // register route once, server.begin() happens on button press
+    server.on("/save", handleSave);     // receives the form data
 }
 
 void loop() {
@@ -449,6 +602,7 @@ void loop() {
             configModeStart = now;
             server.begin();
             Serial.println(WiFi.localIP());
+            drawConfigScreen();
         }
         delay(300);
     }
@@ -461,6 +615,9 @@ void loop() {
         configModeActive = false;
         server.stop();
         Serial.println("Config mode ended.");
+        fetchAndDraw(false);
+        lastUpdate = now;
+        refreshCounter = 0;
     }
 
     // Scheduled refresh: partial refresh most cycles (fast, less flicker),
