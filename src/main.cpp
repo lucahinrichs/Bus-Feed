@@ -4,6 +4,7 @@
 #include <WiFiMulti.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
+#include <WebServer.h>
 #include <ArduinoJson.h>
 #include <ctime>
 #include "secrets.h"
@@ -18,8 +19,9 @@
 #define EPD_BUSY  9
 #define EPD_SCK  12
 #define EPD_MOSI 11
-#define MENU_KEY  2   // top button (IO2 per schematic) — toggles dark mode
-#define EXIT_KEY  1   // bottom button (IO1 per schematic) — forces a manual data refresh
+#define MENU_KEY  2     // top button (IO2 per schematic) — toggles dark mode
+#define EXIT_KEY  1     // bottom button (IO1 per schematic) — forces a manual data refresh
+constexpr uint8_t OK_KEY = 5;
 
 GxEPD2_BW<GxEPD2_213_B74, GxEPD2_213_B74::HEIGHT> display(
     GxEPD2_213_B74(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY));
@@ -27,6 +29,7 @@ GxEPD2_BW<GxEPD2_213_B74, GxEPD2_213_B74::HEIGHT> display(
 const char* ntp_server = "pool.ntp.org";
 const char* tz_berlin = "CET-1CEST,M3.5.0,M10.5.0/3";
 WiFiMulti wifiMulti;
+WebServer server(80);   // create server (accessible on port 80)
 
 // --- DARK MODE ---
 // Rather than hardcoding black/white everywhere, drawUI()/drawItem() derive
@@ -61,7 +64,10 @@ const char* API_URLS[2] = {
 
 unsigned long lastUpdate = 0;
 const unsigned long UPDATE_INTERVAL = 60000; // 60 seconds between scheduled refreshes
+constexpr unsigned long CONFIG_TIMEOUT_MS = 60000; // 60 s for testing, rais to 10 minutes later on
 int refreshCounter = 0;
+bool configModeActive = false;
+unsigned long configModeStart = 0;
 
 // Parses an ISO 8601 timestamp (e.g. "2026-09-27T17:12:00+02:00") and returns
 // the number of minutes from now until that time.
@@ -374,6 +380,10 @@ void fetchAndDraw(bool isPartial) {
     drawUI(isPartial);
 }
 
+void handleRoot() {
+    server.send(200, "text/html", "<h1>Hallo</h1>");
+}
+
 void setup() {
     Serial.begin(115200);
 
@@ -381,9 +391,10 @@ void setup() {
     digitalWrite(EPD_PWR, HIGH);
     delay(100);
 
-    // Both buttons use INPUT_PULLUP, so a press reads as LOW.
+    // All buttons use INPUT_PULLUP, so a press reads as LOW.
     pinMode(MENU_KEY, INPUT_PULLUP);
     pinMode(EXIT_KEY, INPUT_PULLUP);
+    pinMode(OK_KEY, INPUT_PULLUP);
 
     // Set SPI pins explicitly — otherwise the ESP32-S3 default MISO pin
     // collides with EPD_DC on this board.
@@ -407,6 +418,7 @@ void setup() {
 
     fetchAndDraw(false);
     lastUpdate = millis();
+    server.on("/", handleRoot);     // register route once, server.begin() happens on button press
 }
 
 void loop() {
@@ -430,9 +442,30 @@ void loop() {
         delay(300); // basic debounce
     }
 
+    if (digitalRead(OK_KEY) == LOW) {
+        Serial.println("OK button was pressed.");
+        if (!configModeActive) {
+            configModeActive = true;
+            configModeStart = now;
+            server.begin();
+            Serial.println(WiFi.localIP());
+        }
+        delay(300);
+    }
+
+    if (configModeActive) {
+        server.handleClient();
+    }
+
+    if (configModeActive && now - configModeStart >= CONFIG_TIMEOUT_MS) {
+        configModeActive = false;
+        server.stop();
+        Serial.println("Config mode ended.");
+    }
+
     // Scheduled refresh: partial refresh most cycles (fast, less flicker),
     // full refresh every 10th cycle to clear any accumulated ghosting.
-    if (now - lastUpdate >= UPDATE_INTERVAL) {
+    if (!configModeActive && now - lastUpdate >= UPDATE_INTERVAL) {
         lastUpdate = now;
         refreshCounter++;
 
