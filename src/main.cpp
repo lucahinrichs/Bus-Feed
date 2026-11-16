@@ -59,9 +59,9 @@ int dirBCount = 0;
 char statusMsg[32] = "";
 
 // Primary endpoint + fallback mirror, tried in order on each fetch.
-const char* API_URLS[2] = {
-    "https://v6.bvg.transport.rest/stops/900002200/departures?results=15&duration=60",
-    "https://v6.vbb.transport.rest/stops/900002200/departures?results=15&duration=60"
+const char* API_HOSTS[2] = {
+    "v6.bvg.transport.rest",
+    "v6.vbb.transport.rest"
 };
 
 unsigned long lastUpdate = 0;
@@ -288,8 +288,21 @@ void fetchAndDraw(bool isPartial) {
                                // handling sensitive data.
         client.setTimeout(10000);
 
+        char url [200];
+        snprintf(url, sizeof(url),
+            "https://%s/stops/%s/departures?results=15&duration=60&subway=%s&suburban=%s&bus=%s&tram=%s",
+            API_HOSTS[apiIdx],
+            stopID,
+            showUBahn ? "true" : "false",
+            showSBahn ? "true" : "false",
+            showBus ? "true" : "false",
+            showTram ? "true" : "false"
+            );
+
+        Serial.println(url);    // test print of the used url
+
         HTTPClient http;
-        if (http.begin(client, API_URLS[apiIdx])) {
+        if (http.begin(client, url)) {
             http.setTimeout(10000);
             http.addHeader("User-Agent", "ESP32-BVG-Display/1.0");
             http.addHeader("Connection", "close");
