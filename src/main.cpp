@@ -499,6 +499,16 @@ search.addEventListener('input', () => {
 )rawliteral");
 }
 
+// Accepts only 1 to 15 digits, because the ID ends up in the request URL
+bool isValidStopId(const String& id) {
+    if (id.length() == 0 || id.length() > 15) return false;
+
+    for (size_t i = 0; i < id.length(); i++) {
+        if (!isdigit(id[i])) return false;
+    }
+    return true;
+}
+
 // Handles the POST from the config form. The browser only sends checked
 // checkboxes, so hasArg() is true for checked and false for unchecked ones.
 void handleSave() {
@@ -507,7 +517,7 @@ void handleSave() {
     showBus = server.hasArg("bus");
     showTram = server.hasArg("tram");
 
-    if (server.arg("stop").length() > 0) {
+    if (isValidStopId(server.arg("stop"))) {
         strncpy(stopID, server.arg("stop").c_str(), sizeof(stopID) - 1);
         stopID[sizeof(stopID) - 1] = '\0';
     }
@@ -555,6 +565,9 @@ void setup() {
     while (wifiMulti.run() != WL_CONNECTED && millis() - wifiStart < 15000) {
         delay(300);
     }
+
+    // Wifi diagnosis in case of connection problems
+    Serial.printf("WiFi status: %d, SSID: %s\n", WiFi.status(), WiFi.SSID().c_str());
 
     configTzTime(tz_berlin, ntp_server);
     struct tm t_time;
