@@ -39,6 +39,7 @@ The configuration mode ends automatically after a timeout. Settings are stored o
 - Dark mode toggle via button press (inverts foreground/background colors)
 - Manual instant refresh via a second button, independent of the 60-second cycle
 - Configuration mode on button press with a small web interface (station search, vehicle type toggles), settings stored persistently
+- Departure requests are built from the saved station and vehicle type filters
 - Status messages for WiFi issues, JSON errors, or API outages instead of a blank or frozen display
 
 ## What I Learned
@@ -49,12 +50,13 @@ The configuration mode ends automatically after a timeout. Settings are stored o
 - Learned that free, unofficial APIs like this one can have occasional downtime, and why a fallback/status-display strategy matters more than assuming "it'll just work"
 - Iterative layout fine-tuning directly on real hardware (pixel positioning, spacing, small UI details like a frame around the clock)
 - Hosting a small web server on the ESP32, handling form data, and persisting settings in flash with `Preferences`
+- Building request URLs from user settings with `snprintf()` into fixed buffers, and validating user input (the station ID must be digits only) before it ends up in a URL
 - Debugging network problems: a guest Wi-Fi with client isolation made the device unreachable although the code was fine
 
 ## Known Limitations
 
-- The selected station and vehicle types are saved, but not yet used for the departure requests, so the display still shows the default stop
 - Direction matching (e.g. "Jungfernheide"/"Saatwinkler") is hardcoded, so other stops put all departures into the top section
+- The "no departures" texts on the display are still tied to the default stop
 - The web page does not yet show the currently saved settings
 - TLS certificate validation is intentionally disabled (`setInsecure()`). Acceptable for private use on a home network, but not a production-grade approach
 - During a longer API outage, the display currently only shows a status message instead of the last known departures
@@ -74,10 +76,10 @@ The configuration mode ends automatically after a timeout. Settings are stored o
 - [x] **Configuration mode** on button press with automatic timeout
 - [x] **Web interface** with station search and vehicle type toggles
 - [x] **Persistent settings** across reboots
+- [x] **Saved station and vehicle types** are used for the departure requests
 
 ### Planned
 
-- [ ] **Use the saved station and vehicle types** for the departure requests
 - [ ] **Configurable direction groups** so both sections work for any stop
 - [ ] **Show saved settings** on the web page
 - [ ] **Show last known departures during an API outage** instead of only a status message
